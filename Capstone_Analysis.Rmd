@@ -1,0 +1,628 @@
+---
+title: "Capstone_Analysis"
+author: '27208'
+date: "5/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load packages.
+library(quanteda.textstats)
+library(quanteda)
+library(quanteda.sentiment)
+library(tidyverse)
+library(tmcn)
+```
+
+```{r}
+# Read documents.
+io1 <- read.csv("china_082019.csv", encoding = "UTF-8")
+io2 <- read.csv("china_052020.csv", encoding = "UTF-8")
+io3 <- read.csv("china_122021_cnhu.csv", encoding = "UTF-8")
+io4 <- read.csv("china_122021_cncc.csv", encoding = "UTF-8")
+```
+
+```{r}
+# Set date.
+io1$Date <- as.Date(io1$tweet_time)
+io2$Date <- as.Date(io2$tweet_time)
+io3$Date <- as.Date(io3$tweet_time)
+io4$Date <- as.Date(io4$tweet_time)
+```
+
+```{r}
+# Set language classification
+io1$Language <- "Others"
+io1$Language[io1$tweet_language == "en"] <- "English"
+io1$Language[io1$tweet_language == "zh"] <- "Chinese"
+io1$Language[io1$tweet_language == "und" | io1$tweet_language == ""] <- "Undetermined"
+
+io2$Language <- "Others"
+io2$Language[io2$tweet_language == "en"] <- "English"
+io2$Language[io2$tweet_language == "zh"] <- "Chinese"
+io2$Language[io2$tweet_language == "und" | io2$tweet_language == ""] <- "Undetermined"
+
+io3$Language <- "Others"
+io3$Language[io3$tweet_language == "en"] <- "English"
+io3$Language[io3$tweet_language == "zh"] <- "Chinese"
+io3$Language[io3$tweet_language == "und" | io3$tweet_language == ""] <- "Undetermined"
+
+io4$Language <- "Others"
+io4$Language[io4$tweet_language == "en"] <- "English"
+io4$Language[io4$tweet_language == "zh"] <- "Chinese"
+io4$Language[io4$tweet_language == "und" | io4$tweet_language == ""] <- "Undetermined"
+```
+
+```{r}
+# Set language levels.
+io1$Language <- factor(io1$Language, levels = c("Chinese", "English", "Others", "Undetermined"))
+
+io2$Language <- factor(io2$Language, levels = c("Chinese", "English", "Others", "Undetermined"))
+
+io3$Language <- factor(io3$Language, levels = c("Chinese", "English", "Others", "Undetermined"))
+
+io4$Language <- factor(io4$Language, levels = c("Chinese", "English", "Others", "Undetermined"))
+```
+
+```{r}
+# Set period.
+io1$period[io1$Date < io1_start_gwg] <- "Before"
+io1$period[io1$Date >= io1_start_gwg & io1$Date < io1_start_hk] <- "During (a)"
+io1$period[io1$Date >= io1_start_hk] <- "During (b)"
+
+io2$period[io2$Date < io2_start] <- "Before"
+io2$period[io2$Date >= io2_start] <- "During"
+
+io3$period[io3$Date < io3_start] <- "Before"
+io3$period[io3$Date >= io3_start] <- "During"
+
+io4$period[io4$Date < io4_start] <- "Before"
+io4$period[io4$Date >= io4_start] <- "During"
+```
+
+```{r}
+# Derive Language by Period tables.
+lang_period_io1 <- as.data.frame(prop.table(table(io1$Language, io1$period), margin=2))
+lang_period_io1$IO <- "IO1"
+
+lang_period_io2 <- as.data.frame(prop.table(table(io2$Language, io2$period), margin=2))
+lang_period_io2$IO <- "IO2"
+
+lang_period_io3 <- as.data.frame(prop.table(table(io3$Language, io3$period), margin=2))
+lang_period_io3$IO <- "IO3"
+
+lang_period_io4 <- as.data.frame(prop.table(table(io4$Language, io4$period), margin=2))
+lang_period_io4$IO <- "IO4"
+
+lang_period_df <- rbind(lang_period_io1, lang_period_io2, lang_period_io3, lang_period_io4) %>% rename(Language = Var1, Period = Var2, Count = Freq)
+```
+
+```{r}
+# Plot Language by Period.
+png("Figure_7.png", height = 400, width = 600)
+ggplot(lang_period_df[lang_period_df$Count > 0.001,], aes(fill=Language, y=Count, x=Period, label=round(Count*100,0))) +
+  geom_bar(stat = "identity", position = position_fill(reverse = TRUE)) + 
+  scale_y_continuous(labels = scales::percent) +
+  facet_grid(cols = vars(factor(IO)), scales="free_x") +
+  theme(legend.position = "top") +
+  ylab("Percentage") +
+  xlab("Period (Before or During Operation)") +
+  geom_text(position = position_fill(reverse = TRUE, vjust=0.5), size=4) +
+  scale_fill_manual(values=c("#CC9933", "#99CCFF", "#FFFF00", "#999999")) 
+```
+
+```{r}
+# Create time-class plots: IO1
+png("Figure_8a.png", height = 300, width = 500)
+
+caption_io1a <- "(a) Campaign against Guo Wengui"
+caption_io1b <- "(b) Campaign against Hong Kong protests"
+caption_io1c <- "Start of (a)"
+caption_io1d <- "Start of (b)"
+
+ggplot(overall_df[overall_df$IO == "IO1",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 6200)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
+        axis.title.x = element_blank(),
+        ) +
+  geom_vline(xintercept = c(as.Date("2017-04-24"), as.Date("2019-04-14")), linetype="dotted") +
+  scale_x_date(date_labels =  "%b %y", date_breaks = "6 months", expand = c(0, 0), limits = as.Date(c("", "2020-01-30"))) +
+  annotate("label", x = as.Date("2009-01-01"), y = 6100, label = caption_io1a, hjust = 0, vjust = 0.5, fill="white", label.size = NA) +
+    annotate("label", x = as.Date("2009-01-01"), y = 5500, label = caption_io1b, hjust = 0, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.Date("2017-04-24"), y = 6100, label = caption_io1c, hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.Date("2019-04-14"), y = 6100, label = caption_io1d, hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) 
+```
+
+```{r}
+# Create time-class plots: IO2
+png("Figure_8b.png", height = 300, width = 500)
+
+caption_io2 <- "Start of operation"
+
+ggplot(overall_df[overall_df$IO == "IO2",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 4100)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
+        axis.title.x = element_blank(),
+        ) +
+  geom_vline(xintercept = as.Date("2019-07-27"), linetype="dotted") +
+  scale_x_date(date_labels =  "%b %y", date_breaks = "2 months", expand = c(0, 0)) +
+  annotate("label", x = as.Date("2019-07-27"), y = 4000, label = caption_io2, hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) 
+```
+
+```{r}
+# Create time-class plots: IO3
+png("Figure_8c.png", height = 300, width = 500)
+
+caption_io3 <- "Start of operation"
+
+ggplot(overall_df[overall_df$IO == "IO3",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1100)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
+        axis.title.x = element_blank(),
+        ) +
+  geom_vline(xintercept = as.Date("2020-01-06"), linetype="dotted") +
+  scale_x_date(date_labels =  "%b %y", date_breaks = "2 months", expand = c(0, 0), limits = as.Date(c("", "2021-05-31"))) +
+  annotate("label", x = as.Date("2020-01-06"), y = 1070, label = caption_io3, hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) 
+```
+
+```{r}
+# Create time-class plots: IO4
+png("Figure_8d.png", height = 300, width = 500)
+
+caption_io4 <- paste(strwrap("Start of operation", 20), collapse = "\n")
+
+ggplot(overall_df[overall_df$IO == "IO4",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 72)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
+        axis.title.x = element_blank(),
+        ) +
+  geom_vline(xintercept = as.Date("2020-06-20"), linetype="dotted") +
+  scale_x_date(date_labels =  "%b %y", date_breaks = "6 months", expand = c(0, 0), limits = as.Date(c("", "2021-06-30"))) +
+  annotate("label", x = as.Date("2020-06-20"), y = 70, label = caption_io4, hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) 
+```
+
+
+```{r}
+# Create Type x Period dataframe.
+type_period_io1 <- as.data.frame(prop.table(table(overall_df[overall_df$IO == "IO1",]$class, overall_df[overall_df$IO == "IO1",]$period)))
+type_period_io1$IO <- "IO1"
+
+type_period_io2 <- as.data.frame(prop.table(table(overall_df[overall_df$IO == "IO2",]$class, overall_df[overall_df$IO == "IO2",]$period)))
+type_period_io2$IO <- "IO2"
+
+type_period_io3 <- as.data.frame(prop.table(table(overall_df[overall_df$IO == "IO3",]$class, overall_df[overall_df$IO == "IO3",]$period)))
+type_period_io3$IO <- "IO3"
+
+type_period_io4 <- as.data.frame(prop.table(table(overall_df[overall_df$IO == "IO4",]$class, overall_df[overall_df$IO == "IO4",]$period)))
+type_period_io4$IO <- "IO4"
+
+type_period_df <- rbind(type_period_io1, type_period_io2, type_period_io3, type_period_io4) %>% rename(Type = Var1, Period = Var2, Prop = Freq)
+
+type_period_df$Period <- recode(type_period_df$Period, "During (1)" = "During (a)", "During (2)" = "During (b)")
+```
+
+```{r}
+# Plot Type by Period
+png("Figure_9.png", height = 400, width = 600)
+ggplot(type_period_df, aes(group=Type, color=Type, y=Prop, x=Period, label=round(Prop,0))) +
+  labs(color='Tweet Type') +
+  geom_point(size=3) +
+  geom_line(size=2, alpha=0.5) +
+  #geom_bar(stat = "identity", position = position_fill(reverse = TRUE)) + 
+  scale_y_continuous(labels = scales::percent) +
+  facet_grid(cols = vars(factor(IO)), scales="free_x") +
+  theme(legend.position = "top") +
+  ylab("Percentage") +
+  xlab("Period (Before or During Operation)") 
+  #geom_text(position = position_fill(reverse = TRUE, vjust=0.5), size=3)
+```
+
+```{r}
+# Set explicit spam variable.
+overall_df$explicit_spam[overall_df$class == "Explicit Spam"] <- "Yes"
+overall_df$explicit_spam[overall_df$class != "Explicit Spam"] <- "No"
+```
+
+```{r}
+# Conduct chi-squared tests for explicit spam: Chinese tweets
+
+table_zh_12 <- table(overall_df$IO[overall_df$Language=="Chinese" & (overall_df$IO == "IO1" | overall_df$IO == "IO2")], overall_df$explicit_spam[overall_df$Language=="Chinese" & (overall_df$IO == "IO1" | overall_df$IO == "IO2")])
+prop.table(table_zh_12, margin = 1)*100
+chisq.test(table_zh_12)
+
+table_zh_13 <- table(overall_df$IO[overall_df$Language=="Chinese" & (overall_df$IO == "IO1" | overall_df$IO == "IO3")], overall_df$explicit_spam[overall_df$Language=="Chinese" & (overall_df$IO == "IO1" | overall_df$IO == "IO3")])
+prop.table(table_zh_13, margin = 1)*100
+chisq.test(table_zh_13)
+
+table_zh_14 <- table(overall_df$IO[overall_df$Language=="Chinese" & (overall_df$IO == "IO1" | overall_df$IO == "IO4")], overall_df$explicit_spam[overall_df$Language=="Chinese" & (overall_df$IO == "IO1" | overall_df$IO == "IO4")])
+prop.table(table_zh_14, margin = 1)*100
+chisq.test(table_zh_14)
+```
+
+```{r}
+# Conduct chi-squared tests for explicit spam: English tweets
+
+table_en_12 <- table(overall_df$IO[overall_df$Language=="English" & (overall_df$IO == "IO1" | overall_df$IO == "IO2")], overall_df$explicit_spam[overall_df$Language=="English" & (overall_df$IO == "IO1" | overall_df$IO == "IO2")])
+prop.table(table_en_12, margin = 1)*100
+chisq.test(table_en_12)
+
+table_en_13 <- table(overall_df$IO[overall_df$Language=="English" & (overall_df$IO == "IO1" | overall_df$IO == "IO3")], overall_df$explicit_spam[overall_df$Language=="English" & (overall_df$IO == "IO1" | overall_df$IO == "IO3")])
+prop.table(table_en_13, margin = 1)*100
+chisq.test(table_en_13)
+
+table_en_14 <- table(overall_df$IO[overall_df$Language=="English" & (overall_df$IO == "IO1" | overall_df$IO == "IO4")], overall_df$explicit_spam[overall_df$Language=="English" & (overall_df$IO == "IO1" | overall_df$IO == "IO4")])
+prop.table(table_en_14, margin = 1)*100
+chisq.test(table_en_14)
+```
+
+```{r}
+# Print tweets with objectionable hashtags during IO2.
+overall_df$tweet_text[overall_df$sensitive_hashtag == "Yes" & overall_df$IO == "IO2" & overall_df$period == "During"]
+```
+
+```{r}
+# Derive sentiment scores for English tweets.
+polarity(data_dictionary_LSD2015) <- list(pos = c("positive", "neg_negative"), neg = c("negative", "neg_positive"))
+
+sent_en <- corpus(sentiment_df, text_field = "tweet_text") %>% textstat_polarity(data_dictionary_LSD2015, fun = sent_abspropdiff)
+
+sentiment_df$sentiment <- sent_en
+```
+
+```{r}
+# Derive sentiment scores for Chinese tweets.
+ntusd_dict <- dictionary(NTUSD)
+
+polarity(ntusd_dict) <- list(pos = c('positive_chs', 'positive_cht'), neg = c('negative_chs', 'negative_cht'))
+
+sent_zh <- corpus(sentiment_df_zh, text_field = "tweet_text") %>% textstat_polarity(ntusd_dict, fun = sent_abspropdiff)
+
+sentiment_df_zh$sentiment <- sent_zh
+```
+
+```{r}
+# Derive mean sentiment scores for each IO.
+sentiment_df_all <- rbind(sentiment_df, sentiment_df_zh)
+aggregate(sentiment_df_all$sentiment, list(sentiment_df_all$IO), FUN=mean)
+```
+
+```{r}
+# Format datetimes.
+overall_df$account_creation_datetime <- as.POSIXct(overall_df$account_creation_date, "GMT", format="%Y/%m/%d %H:%M:%OS")
+
+overall_df$tweet_datetime <- as.POSIXct(overall_df$tweet_time, "GMT", format="%Y/%m/%d %H:%M:%OS")
+```
+
+```{r}
+# Create time-class plots: IO1
+png("Figure_10a.png", height = 300, width = 500)
+
+ggplot(overall_df[overall_df$IO == "IO1" & overall_df$period == "During (2)",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  xlab("Date") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 9200)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
+        ) +
+  scale_x_date(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits = as.Date(c("2019-04-14", "2019-09-05"))) +
+  annotate("label", x = as.Date("2019-06-25"), y = 8000, label = "Campaign against Hong Kong protests and Guo Wengui", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) 
+```
+
+```{r}
+# Create user-date plots: IO1
+png("Figure_10b.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO1" & overall_df$period == "During (2)",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=class)) +
+    geom_point(data = overall_df[overall_df$IO == "IO1" & overall_df$period == "During (2)",], aes(y=reorder(userid, account_creation_datetime), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Tweet Type") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits = as.POSIXct(c("2019-04-14", "2019-09-5"), "GMT")) 
+```
+
+```{r}
+# Create time-class plots: IO2
+png("Figure_10c.png", height = 300, width = 500)
+
+ggplot(overall_df[overall_df$IO == "IO2" & overall_df$period != "Before",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  xlab("Date") +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  scale_x_date(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits = as.Date(c("2019-07-27", "2020-04-26")))
+```
+
+```{r}
+# Create user-date plots: IO2
+png("Figure_10d.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO2" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=class)) +
+    geom_point(data = overall_df[overall_df$IO == "IO2" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Tweet Type") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits = as.POSIXct(c("2019-07-27", "2020-04-26")))
+```
+
+```{r}
+# Derive class proportions
+prop.table(table(overall_df[overall_df$IO == "IO1" & overall_df$period == "During (2)",]$class))
+
+prop.table(table(overall_df[overall_df$IO == "IO2" & overall_df$period == "During",]$class))
+```
+
+```{r}
+# Create time-class plots: IO3
+png("Figure_11a.png", height = 300, width = 500)
+
+ggplot(overall_df[overall_df$IO == "IO3" & overall_df$period != "Before",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  xlab("Date") +
+  scale_y_continuous(expand = c(0, 0), limits=c(0,1300)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  scale_x_date(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits = as.Date(c("2020-01-06", "2021-04-11"))) +
+  geom_vline(xintercept = as.Date("2020-12-08"), linetype="dotted") +
+  geom_vline(xintercept = as.Date("2021-01-19"), linetype="dotted") +
+  annotate("label", x = as.Date("2020-07-01"), y = 1280, label = "Phase 1", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.Date("2020-12-30"), y = 1280, label = "2", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.Date("2021-01-20"), y = 1280, label = "3", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.Date("2021-03-01"), y = 1280, label = "4", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) 
+```
+
+```{r}
+# Create user-date plots: IO3
+png("Figure_11b.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO3" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=class)) +
+  geom_point(data = overall_df[overall_df$IO == "IO3" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Tweet Type") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits=as.POSIXct(c("2020-01-06", "2021-04-11"))) +
+  scale_y_discrete(expand = expansion(add = c(0,230))) +
+  geom_vline(xintercept = as.POSIXct("2020-12-08"), linetype="dotted") +
+  geom_vline(xintercept = as.POSIXct("2021-01-19"), linetype="dotted") +
+  annotate("label", x = as.POSIXct("2020-07-01"), y = 2220, label = "Phase 1", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.POSIXct("2020-12-30"), y = 2220, label = "2", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.POSIXct("2021-01-20"), y = 2220, label = "3", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA) +
+  annotate("label", x = as.POSIXct("2021-03-01"), y = 2220, label = "4", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA)
+```
+
+```{r}
+# Create time-class plots: IO4
+png("Figure_11c.png", height = 300, width = 500)
+
+ggplot(overall_df[overall_df$IO == "IO4" & overall_df$period != "Before",], aes(x=Date, fill=class)) +
+  geom_bar(stat = "count") +
+  ylab("Count") + 
+  xlab("Date") +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(fill='Tweet Type') +
+  theme(legend.position = "top", 
+        panel.background = element_rect(fill="white"), 
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  scale_x_date(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits = as.Date(c("2020-06-20", "2021-03-30"))) 
+
+#  geom_vline(xintercept = as.Date("2020-06-20"), linetype="dotted") +
+# annotate("label", x = as.Date("2020-06-20"), y = 88, label = caption_io4, hjust = 0.5, vjust = 0.5, fill="white", label.size = NA)
+```
+
+```{r}
+# Create user-date plots: IO4
+png("Figure_11d.png", height = 300, width = 500)
+
+ggplot(overall_df[overall_df$IO == "IO4" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=class)) +
+  geom_point(data = overall_df[overall_df$IO == "IO4" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Tweet Type") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits=as.POSIXct(c("2020-06-20", "2021-03-30")))
+```
+
+```{r}
+# Code IO3 phases.
+io3_during <- overall_df %>% filter(IO == "IO3" & period == "During")
+
+io3_during$Phase <- "Phase 1"
+io3_during$Phase[io3_during$Date >= as.Date("2020-12-08") & io3_during$Date <= as.Date("2021-01-18")] <- "Phase 2"
+io3_during$Phase[io3_during$Date >= as.Date("2021-01-19") & io3_during$Date <= as.Date("2021-01-21")] <- "Phase 3"
+io3_during$Phase[io3_during$Date > as.Date("2021-01-21")] <- "Phase 4"
+
+io3_during_table <- as.data.frame(prop.table(table(io3_during$class, io3_during$Phase), margin=2)) %>% rename(class = Var1, Phase = Var2, Count = Freq)
+```
+
+```{r}
+# Create phase-type table: IO3.
+png("Figure_13.png", height = 350, width = 300)
+ggplot(io3_during_table[io3_during_table$Count>0.01,], aes(fill=class, y=Count, x=Phase, label=round(Count*100,0))) +
+  geom_bar(stat = "identity", position = position_fill(reverse = TRUE)) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme(legend.position = "top") +
+  ylab("Percentage") +
+  xlab("Phase") +
+  labs(fill='Tweet Type') +
+  geom_text(position = position_fill(reverse = TRUE, vjust=0.5), size=4) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF"))
+```
+
+```{r}
+# Derive class proportions: IO4
+prop.table(table(overall_df[overall_df$IO == "IO4" & overall_df$period == "During" & overall_df$Date < as.Date("2020-11-02"),]$class))
+
+prop.table(table(overall_df[overall_df$IO == "IO4" & overall_df$period == "During" & overall_df$Date >= as.Date("2021-01-29") & overall_df$Date <= as.Date("2021-02-07"),]$class))
+```
+
+```{r}
+# Find date range of posts.
+date_range_user <- overall_df %>% 
+  group_by(userid) %>% 
+  summarise(first=first(tweet_time), last=last(tweet_time))
+
+overall_df <- merge(overall_df, date_range_user, by="userid", all = TRUE)
+```
+
+```{r}
+# Recode language.
+overall_df$Language[overall_df$tweet_language == "en"] <- "English"
+overall_df$Language[overall_df$tweet_language == "zh"] <- "Chinese"
+```
+
+```{r}
+# Create user-date plot: IO3 (Type)
+png("Figure_14a.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO3" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=class)) +
+  geom_point(data = overall_df[overall_df$IO == "IO3" & overall_df$period == "During",], aes(y=reorder(userid, as.Date(account_creation_date)), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Tweet Type") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits=as.POSIXct(c("2020-06-20", "2021-03-29"))) +
+geom_vline(xintercept = as.POSIXct("2021-01-19 00:00:00", "GMT"), linetype="dotted") +
+annotate("label", x = as.POSIXct("2020-11-28 00:00:00", "GMT"), y=1995, label = "Release of Pompeo's statement", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA)
+```
+
+```{r}
+# Create user-date plot: IO4 (Type)
+png("Figure_14b.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO4" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=class)) +
+  geom_point(data = overall_df[overall_df$IO == "IO4" & overall_df$period == "During",], aes(y=reorder(userid, as.Date(account_creation_date)), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_fill_manual(values=c("#F8766D", "#00BA38", "#619CFF", "#C77CFF")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Tweet Type") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits=as.POSIXct(c("2020-06-20", "2021-03-29"))) +
+geom_vline(xintercept = as.POSIXct("2021-01-19 00:00:00", "GMT"), linetype="dotted") +
+annotate("label", x = as.POSIXct("2020-11-28 00:00:00", "GMT"), y=115, label = "Release of Pompeo's statement", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA)
+```
+
+```{r}
+# Create user-date plot: IO3 (Language)
+png("Figure_14c.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO3" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=Language)) +
+  geom_point(data = overall_df[overall_df$IO == "IO3" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_colour_manual(values=c("#CC9933", "#99CCFF", "#FFFF00", "#999999")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Language") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits=as.POSIXct(c("2020-06-20", "2021-03-29"))) +
+  geom_vline(xintercept = as.POSIXct("2021-01-19 00:00:00", "GMT"), linetype="dotted") +
+  annotate("label", x = as.POSIXct("2020-11-28 00:00:00", "GMT"), y=1995, label = "Release of Pompeo's statement", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA)
+```
+
+```{r}
+# Create user-date plot: IO4 (Language)
+png("Figure_14d.png", height = 300, width = 500)
+ggplot(overall_df[overall_df$IO == "IO4" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=tweet_datetime, color=Language)) +
+  geom_point(data = overall_df[overall_df$IO == "IO4" & overall_df$period == "During",], aes(y=reorder(userid, account_creation_datetime), x=account_creation_datetime), shape=4, color="black") +
+  geom_point(pch=20, alpha=0.5) +
+  scale_colour_manual(values=c("#CC9933", "#99CCFF", "#FFFF00", "#999999")) +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill="white"),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)
+        ) +
+  labs(color="Language") +
+  ylab("Account") +
+  xlab("Date and Time") +
+  scale_x_datetime(date_labels =  "%d %b %y", date_breaks = "2 weeks", expand = c(0, 0), limits=as.POSIXct(c("2020-06-20", "2021-03-29"))) +
+geom_vline(xintercept = as.POSIXct("2021-01-19 00:00:00", "GMT"), linetype="dotted") +
+annotate("label", x = as.POSIXct("2020-11-28 00:00:00", "GMT"), y=115, label = "Release of Pompeo's statement", hjust = 0.5, vjust = 0.5, fill="white", label.size = NA)
+```
+
+```{r}
+# Derive number of accounts created in different periods: IO4
+unique(io4$userid[as.Date(io4$account_creation_date) < as.Date("2021-01-01")])
+
+unique(io4$userid[as.Date(io4$account_creation_date) >= as.Date("2021-01-01") & as.Date(io4$account_creation_date) <= as.Date("2021-02-20")])
+
+unique(io4$userid[as.Date(io4$account_creation_date) >as.Date("2021-02-20")])
+```
