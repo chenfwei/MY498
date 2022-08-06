@@ -1,0 +1,591 @@
+---
+title: "Capstone_Active Learning"
+author: '27208'
+date: "4/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load packages.
+library(tidyverse)
+library(readxl)
+library(quanteda)
+library(MLmetrics)
+library(e1071)
+library(irr)
+```
+
+```{r}
+# Read labelled files.
+io1_en_lab <- read_excel("china_082019_en_class.xlsx") %>% select(-poll_choices)
+io1_en_lab$io <- "1"
+
+io1_zh_lab <- read_excel("china_082019_zh_class.xlsx") %>% select(-poll_choices)
+io1_zh_lab$io <- "1"
+
+io2_en_lab <- read_excel("china_052020_en_class.xlsx")
+io2_en_lab$io <- "2"
+
+io2_zh_lab <- read_excel("china_052020_zh_class.xlsx")
+io2_zh_lab$io <- "2"
+
+io3_en_lab <- read_excel("china_122021_cnhu_en_class.xlsx") %>% select(-Note)
+io3_en_lab$io <- "3"
+
+io3_zh_lab <- read_excel("china_122021_cnhu_zh_class.xlsx")
+io3_zh_lab$io <- "3"
+
+io4_en_lab <- read_excel("china_122021_cncc_en_class.xlsx")
+io4_en_lab$io <- "4"
+
+io4_zh_lab <- read_excel("china_122021_cncc_zh.xlsx") %>% rename(X.U.FEFF.X = X)
+io4_zh_lab$io <- "4"
+```
+
+```{r}
+# Code categories ("others" = Propaganda, "human" = Humanising Spam, "spam" = Explicit Spam)
+io_cat <- function(io_data) {
+  io_data %>% mutate(category=recode(class1, 
+                                  "disinformation" = "others",
+                                  "reporting" = "others",
+                                  "personal" = "human",
+                                  "trend" = "human",
+                                  "hashjacking" = "spam",
+                                  "inflation" = "spam",
+                                  "lure" = "spam",
+                                  "commercial" = "spam",
+                                  "gibberish" = "spam",
+                                  "mechanical" = "spam"
+                                  )
+                      )
+}
+```
+
+```{r}
+# View category distributions.
+io1_en_lab <- io_cat(io1_en_lab)
+table(io1_en_lab$category)
+
+io1_zh_lab <- io_cat(io1_zh_lab)
+table(io1_zh_lab$category)
+
+io2_en_lab <- io_cat(io2_en_lab)
+table(io2_en_lab$category)
+
+io2_zh_lab <- io_cat(io2_zh_lab)
+table(io2_zh_lab$category)
+
+io3_en_lab <- io_cat(io3_en_lab)
+table(io3_en_lab$category)
+
+io3_zh_lab <- io_cat(io3_zh_lab)
+table(io3_zh_lab$category)
+
+io4_en_lab <- io_cat(io4_en_lab)
+table(io4_en_lab$category)
+
+io4_zh_lab <- io_cat(io4_zh_lab)
+table(io4_zh_lab$category)
+```
+```{r}
+# Combine dataframes.
+io_en_lab <- rbind(io1_en_lab, io2_en_lab, io4_en_lab, io3_en_lab)
+
+io_zh_lab <- rbind(io1_zh_lab, io2_zh_lab, io4_zh_lab, io3_zh_lab)
+
+table(io_en_lab$category)
+table(io_zh_lab$category)
+```
+
+```{r}
+# Remove unnecessary documents.
+rm(io1_en_lab, io2_en_lab, io3_en_lab, io4_en_lab, io1_zh_lab, io2_zh_lab, io3_zh_lab, io4_zh_lab)
+```
+
+```{r}
+# Derive intrarater reliability for English tweets ("class3" = second classification by primary researcher)
+print("English intrarater")
+intrarater_data_en <- select(io_en_lab, category, class3) 
+agree(intrarater_data_en)
+
+intrarater_data_en <- t(intrarater_data_en[complete.cases(intrarater_data_en),])
+kripp.alpha(intrarater_data_en)
+```
+
+```{r}
+# Derive interrater reliability for English tweets ("class2" = classification by second coder)
+print("English interrater")
+interrater_data_en <- select(io_en_lab, category, class2) 
+agree(interrater_data_en)
+
+interrater_data_en <- t(interrater_data_en[complete.cases(interrater_data_en),])
+kripp.alpha(interrater_data_en)
+```
+
+```{r}
+# Derive intrarater reliability for Chinese tweets ("class3" = second classification by primary researcher)
+print("Chinese intrarater")
+intrarater_data_zh <- select(io_zh_lab, category, class3)
+agree(intrarater_data_zh)
+
+intrarater_data_zh <- t(intrarater_data_zh[complete.cases(intrarater_data_zh),])
+kripp.alpha(intrarater_data_zh)
+```
+
+```{r}
+# Derive interrater reliability for Chinese tweets ("class2" = classification by second coder)
+print("Chinese interrater")
+interrater_data_zh <- select(io_zh_lab, category, class2) 
+agree(interrater_data_zh)
+
+interrater_data_zh <- t(interrater_data_zh[complete.cases(interrater_data_zh),])
+kripp.alpha(interrater_data_zh)
+```
+
+```{r}
+# Read unlabelled files.
+io1_en_unlab <- read_csv("china_082019_en_main.csv") %>% select(-poll_choices)
+io1_en_unlab$io <- "1"
+
+io1_zh_unlab <- read_csv("china_082019_zh_main.csv") %>% select(-poll_choices)
+io1_zh_unlab$io <- "1"
+
+io2_en_unlab <- read_csv("china_052020_en_main.csv")
+io2_en_unlab$io <- "2"
+
+io2_zh_unlab <- read_csv("china_052020_zh_main.csv")
+io2_zh_unlab$io <- "2"
+
+io3_en_unlab <- read_csv("china_122021_cnhu_en_main.csv")
+io3_en_unlab$io <- "3"
+
+io3_zh_unlab <- read_csv("china_122021_cnhu_zh_main.csv")
+io3_zh_unlab$io <- "3"
+
+io4_en_unlab <- read_csv("china_122021_cncc_en_main.csv")
+io4_en_unlab$io <- "4"
+```
+
+```{r}
+# Combine dataframes.
+io_en_unlab <- rbind(io1_en_unlab, io2_en_unlab, io4_en_unlab, io3_en_unlab) %>% add_column(category = NA)
+
+io_zh_unlab <- rbind(io1_zh_unlab, io2_zh_unlab, io3_zh_unlab) %>% add_column(category = NA)
+```
+
+```{r}
+# Remove unnecessary data.
+rm(io1_en_unlab, io2_en_unlab, io3_en_unlab, io4_en_unlab, io1_zh_unlab, io2_zh_unlab, io3_zh_unlab)
+```
+
+```{r}
+# Combine labelled and unlabelled data.
+io_en_combined <- rbind(select(io_en_lab, -class1, -class2, -class3), io_en_unlab)
+io_en_combined$id <- paste("en", 1:nrow(io_en_combined), sep="")
+
+io_zh_combined <- rbind(select(io_zh_lab, -class1, -class2, -class3), io_zh_unlab)
+io_zh_combined$id <- paste("zh", 1:nrow(io_zh_combined), sep="")
+```
+
+Classify English Tweets
+
+```{r}
+# Load in data as a quanteda corpus
+en_corpus <- corpus(io_en_combined, text_field = "tweet_text")
+
+# Create a matrix of word counts
+en_toks <- tokens(en_corpus) 
+en_dfm <- dfm(en_toks)
+```
+
+```{r}
+# Separate labeled documents from unlabeled documents. 
+en_dfm_unlabeled <- dfm_subset(en_dfm, is.na(en_dfm$category))
+en_dfm_labeled <- dfm_subset(en_dfm, !is.na(en_dfm$category))
+```
+
+```{r}
+# Split into train and test set to estimate generalization error.
+set.seed(42)
+
+en_tr_row <- sample(nrow(en_dfm_labeled), floor(nrow(en_dfm_labeled) * 0.7))
+
+en_test_row <- seq(1,nrow(en_dfm_labeled))[!seq(1,nrow(en_dfm_labeled)) %in% en_tr_row]
+
+table(en_dfm_labeled[en_tr_row,]$category)
+```
+
+```{r}
+# Extract labels.
+en_label <- factor(en_dfm_labeled$category)
+levels(en_label) = c(1, 2, 3)
+```
+
+```{r}
+# Tune hyperparameters.
+en_tuneout <- tune(svm, 
+                   en_dfm_labeled[en_tr_row,],
+                   en_label[en_tr_row], 
+                   kernel = "linear", 
+                   ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)),
+                   type='C-classification',
+                   tunecontrol = tune.control(
+                     sampling = "cross",
+                     cross = 5,
+                     performances = TRUE,
+                     error.fun = function(y, pred) 1 - F1_Score(y, pred)
+                     )
+                   )
+
+en_tuneout
+```
+
+```{r}
+# Recover F1 for the best model (the model minimized 1-F1).
+abs(1 - min(en_tuneout$performances$error))
+
+# Extract best model.
+en_bestmod <- en_tuneout$best.model
+summary(en_bestmod)
+```
+
+```{r}
+# Derive accuracy.
+Accuracy(predict(en_bestmod, en_dfm_labeled[en_test_row,]), en_label[en_test_row])
+
+# Derive F1 score.
+F1_Score(en_label[en_test_row], predict(en_bestmod, en_dfm_labeled[en_test_row,]), positive = "1")
+
+F1_Score(en_label[en_test_row], predict(en_bestmod, en_dfm_labeled[en_test_row,]), positive = "2")
+
+F1_Score(en_label[en_test_row], predict(en_bestmod, en_dfm_labeled[en_test_row,]), positive = "3")
+```
+# Final (cost = 0.1)
+[1] 0.8233333
+[1] 0.8551913
+[1] 0.8967742
+[1] 0.5316456
+
+Classify Chinese Tweets
+
+```{r}
+# Load in data as a quanteda corpus
+zh_corpus <- corpus(io_zh_combined, text_field = "tweet_text")
+
+# Create a matrix of word counts
+zh_toks <- tokens(zh_corpus) 
+zh_dfm <- dfm(zh_toks)
+```
+
+```{r}
+# Separate labeled documents from unlabeled documents. 
+zh_dfm_unlabeled <- dfm_subset(zh_dfm, is.na(zh_dfm$category))
+zh_dfm_labeled <- dfm_subset(zh_dfm, !is.na(zh_dfm$category))
+```
+
+```{r}
+# Split into train and test set to estimate generalization error
+set.seed(42)
+
+zh_tr_row <- sample(nrow(zh_dfm_labeled), floor(nrow(zh_dfm_labeled) * 0.7))
+
+zh_test_row <- seq(1,nrow(zh_dfm_labeled))[!seq(1,nrow(zh_dfm_labeled)) %in% zh_tr_row]
+
+table(zh_dfm_labeled[zh_tr_row,]$category)
+```
+
+```{r}
+# Extract labels.
+zh_label <- factor(zh_dfm_labeled$category)
+levels(zh_label) = c(1, 2, 3)
+```
+
+```{r}
+# Tune hyperparameters.
+zh_tuneout <- tune(svm, 
+                   zh_dfm_labeled[zh_tr_row,],
+                   zh_label[zh_tr_row], 
+                   kernel = "linear", 
+                   ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)),
+                   type='C-classification',
+                   tunecontrol = tune.control(
+                     sampling = "cross",
+                     performances = TRUE,
+                     cross = 5,
+                     error.fun = function(y, pred) 1 - F1_Score(y, pred)
+                     )
+                   )
+
+zh_tuneout
+```
+
+```{r}
+# Recover F1 for the best model (the model minimized 1-F1).
+abs(1 - min(zh_tuneout$performances$error))
+
+# Extract best model.
+zh_bestmod <- zh_tuneout$best.model
+summary(zh_bestmod)
+```
+
+```{r}
+# Derive accuracy.
+Accuracy(predict(zh_bestmod, zh_dfm_labeled[zh_test_row,]), zh_label[zh_test_row])
+
+# Derive F1 score.
+F1_Score(zh_label[zh_test_row], predict(zh_bestmod, zh_dfm_labeled[zh_test_row,]), positive = "1")
+F1_Score(zh_label[zh_test_row], predict(zh_bestmod, zh_dfm_labeled[zh_test_row,]), positive = "2")
+F1_Score(zh_label[zh_test_row], predict(zh_bestmod, zh_dfm_labeled[zh_test_row,]), positive = "3")
+```
+
+# Final
+[1] 0.9230769
+[1] 0.9045643
+[1] 0.9428951
+[1] 0.4615385
+
+1st
+
+[1] 0.8843537
+[1] 0.938401
+[1] 0.4285714
+
+```{r}
+# Find top 10 closest observations.
+zh_signed_distance <- predict(zh_bestmod, zh_dfm_unlabeled, decision.values = TRUE)
+
+zh_distances <- abs(attr(zh_signed_distance, "decision.values"))
+
+zh_sorted_distances_13 <- sort(zh_distances[,"1/3"], index.return=TRUE)
+
+zh_ixs_13 <- zh_sorted_distances_13$ix[1:10]
+
+#zh_ixs <- as.numeric(names(sort(c(zh_sorted_distances_13, zh_sorted_distances_32)$x)[1:10]))
+
+as.character(zh_corpus[zh_ixs_13]) # grab the documents by index of the closest observations
+```
+
+```{r}
+# Code closest observations.
+zh_dfm$category[docnames(zh_dfm)=="text706709"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text423428"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text788734"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text788834"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text789439"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text794946"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text795121"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text795213"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text915674"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text915696"] <- "others"
+```
+
+[1] 
+[1] 
+[1] 
+
+```{r}
+# Code closest observations.
+zh_dfm$category[docnames(zh_dfm)=="text6473"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text205767"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text53831"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text499350"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text632690"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text671607"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text789863"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text61059"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text547109"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text547118"] <- "others"
+```
+
+[1] 0.8828829
+[1] 0.9391979
+[1] 0.3076923
+
+```{r}
+# Code closest observations.
+zh_dfm$category[docnames(zh_dfm)=="text966254"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text685792"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text500324"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text247141"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text920605"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text973004"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text748456"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text267692"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text267812"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text820862"] <- "others"
+```
+
+[1] 0.8812095
+[1] 0.9326288
+[1] 0.375
+
+```{r}
+# Find top 10 closest observations.
+zh_signed_distance <- predict(zh_bestmod, zh_dfm_unlabeled, decision.values = TRUE)
+
+zh_distances <- abs(attr(zh_signed_distance, "decision.values"))
+
+zh_sorted_distances_23 <- sort(zh_distances[,"2/3"], index.return=TRUE)
+
+zh_ixs_23 <- zh_sorted_distances_23$ix[1:10]
+
+#zh_ixs <- as.numeric(names(sort(c(zh_sorted_distances_13, zh_sorted_distances_32)$x)[1:10]))
+
+as.character(zh_corpus[zh_ixs_23]) # grab the documents by index of the closest observations
+```
+
+```{r}
+# Code closest observations.
+zh_dfm$category[docnames(zh_dfm)=="text636057"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text354811"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text451761"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text471899"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text448856"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text476517"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text378813"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text292539"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text658925"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text1003202"] <- "human"
+```
+
+[1] 0.8884381
+[1] 0.9320652
+[1] 0.3076923
+
+```{r}
+# Code closest observations.
+zh_dfm$category[docnames(zh_dfm)=="text347737"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text362232"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text405537"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text410442"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text711422"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text731935"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text722976"] <- "spam"
+zh_dfm$category[docnames(zh_dfm)=="text287144"] <- "human"
+zh_dfm$category[docnames(zh_dfm)=="text771092"] <- "others"
+zh_dfm$category[docnames(zh_dfm)=="text361134"] <- "human"
+```
+
+# Cost = 1
+
+[1] 0.9230769
+[1] 0.9045643
+[1] 0.9428951
+[1] 0.4615385
+
+```{r}
+# Predict unlabelled tweets.
+set.seed(42)
+docvars(en_dfm_unlabeled, "category") <- predict(en_bestmod, en_dfm_unlabeled)
+docvars(zh_dfm_unlabeled, "category") <- predict(zh_bestmod, zh_dfm_unlabeled)
+```
+
+```{r}
+# Combine labelled and unlabelled tweets.
+en_dfm_full <- rbind(en_dfm_labeled, en_dfm_unlabeled)
+en_dfm_full$category <- as.factor(en_dfm_full$category)
+levels(en_dfm_full$category)[1] <- "human"
+levels(en_dfm_full$category)[2] <- "others"
+levels(en_dfm_full$category)[3] <- "spam"
+
+zh_dfm_full <- rbind(zh_dfm_labeled, zh_dfm_unlabeled)
+zh_dfm_full$category <- as.factor(zh_dfm_full$category)
+levels(zh_dfm_full$category)[1] <- "human"
+levels(zh_dfm_full$category)[2] <- "others"
+levels(zh_dfm_full$category)[3] <- "spam"
+```
+
+```{r}
+# Combine dfms and convert to dataframe.
+docvars(zh_dfm_full)$X <- docvars(zh_dfm_full)$X.U.FEFF.X
+combined_dfm <- rbind(en_dfm_full, zh_dfm_full)
+combined_df <- as.data.frame(docvars(combined_dfm))
+```
+
+```{r}
+# Combine io dataframes.
+io_zh_combined <- rename(io_zh_combined, X = X.U.FEFF.X)
+io_combined <- rbind(io_en_combined, io_zh_combined)
+```
+
+```{r}
+# Merge text and docvars.
+overall_df <- merge(combined_df, select(io_combined, tweet_text, id), by="id")
+```
+
+```{r}
+overall_df <- overall_df %>% mutate(IO=recode(io, 
+                         "1"="IO1",
+                         "2"="IO2",
+                         "3"="IO3",
+                         "4"="IO4")
+                      )
+```
+
+```{r}
+# Extract hashtags.
+hashtags_all <- str_extract_all(overall_df$tweet_text, "#\\S+")
+hashtag_all_list <- unlist(hashtags_all)
+hashtag_all_freq <- as.data.frame(table(hashtag_all_list), stringsAsFactors=FALSE)
+```
+
+```{r}
+# Identify sensitive hashtags.
+sensitive_hashtags <- '#HongKongHumanRightsandDemocracyAct|#hongkongpolicebrutality|#HongKongPoliceTerrorism|#HongKongPoliceTerrorists|#prayforHongKong|#policebrutality|#PoliceBrutality|#PrayForHongkong|#StandWithHongKong|#StandWithHongKong.|#NoToChinaExtradition|#OccupyHK|#chinazi|#SOSHK|#UyghursLivesMatter|#UYGHURLIVESMATTER|#Xinjiangcamps|#genocide|#genocide"|#CrimesAgainstHumanity|#Fight4Freedoms:|#religiousfreedom|#ReligiousFreedom|#Religiousfreedom!|#ReligiousFreedomForAll…|#DefendMediaFreedom|#WorldPressFreedomDay!|#WorldPressFreedomDay,|#WorldPressFreedomDay|#WorldPressFreedomDay.|#pressfreedom|#黑警|#颜色革命|#香港颜色|#疫情"Chinese|#台湾不属中国|#新疆集中营|#新闻自由|#言论自由|#人权和自由| #言論自由|#言论自由行'
+```
+
+```{r}
+# Classify distraction spam.
+overall_df[grep(sensitive_hashtags, overall_df$tweet_text, value = F), "sensitive_hashtag"] <- "Yes"
+overall_df$sensitive_hashtag[is.na(overall_df$sensitive_hashtag)] <- "No"
+```
+
+```{r}
+# Recode classification.
+overall_df$class <- as.character(overall_df$category)
+
+overall_df$class[overall_df$class == "spam"] <- "Explicit Spam"
+overall_df$class[overall_df$class == "human"] <- "Humanising Spam"
+overall_df$class[overall_df$class == "others"] <- "Propaganda"
+overall_df$class[overall_df$sensitive_hashtag == "Yes"] <- "Distraction Spam"
+overall_df$class <- factor(overall_df$class, levels = c("Propaganda", "Humanising Spam", "Distraction Spam", "Explicit Spam"))
+```
+
+```{r}
+# Reformat date variable
+overall_df$Date <- as.Date(overall_df$Date)
+```
+
+```{r}
+# Set periods
+overall_df$Date <- as.Date(overall_df$tweet_time)
+io1_start_gwg <- as.Date("2017-04-24")
+io1_start_hk <- as.Date("2019-04-14")
+io2_start <- as.Date("2019-07-27")
+io3_start <- as.Date("2020-01-06")
+io4_start <- as.Date("2020-06-20")
+
+overall_df$period[overall_df$IO == "IO1" & overall_df$Date < io1_start_gwg] <- "Before"
+
+overall_df$period[overall_df$IO == "IO1" & overall_df$Date >= io1_start_gwg & overall_df$Date < io1_start_hk] <- "During (1)"
+
+overall_df$period[overall_df$IO == "IO1" & overall_df$Date >= io1_start_hk] <- "During (2)"
+
+overall_df$period[overall_df$IO == "IO2" & overall_df$Date < io2_start] <- "Before"
+overall_df$period[overall_df$IO == "IO2" & overall_df$Date >= io2_start] <- "During"
+
+overall_df$period[overall_df$IO == "IO3" & overall_df$Date < io3_start] <- "Before"
+overall_df$period[overall_df$IO == "IO3" & overall_df$Date >= io3_start] <- "During"
+
+overall_df$period[overall_df$IO == "IO4" & overall_df$Date < io4_start] <- "Before"
+overall_df$period[overall_df$IO == "IO4" & overall_df$Date >= io4_start] <- "During"
+```
+
+```{r}
+# Save dataframe
+write_excel_csv(overall_df, "capstone_analysis_data.csv")
+```
