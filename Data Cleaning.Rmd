@@ -1,0 +1,191 @@
+---
+title: "Capstone Data Cleaning"
+author: '27208'
+date: "3/21/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load libraries.
+library(dplyr)
+library(readr)
+library(tmcn)
+```
+```{r}
+# Download the following files from https://transparency.twitter.com/en/reports/information-operations.html and read them.
+
+io1a <- read.csv("china_082019_1_tweets_csv_hashed", encoding = "UTF-8")
+io1b <- read.csv("china_082019_2_tweets_csv_hashed", encoding = "UTF-8")
+io1c <- read.csv("china_082019_3_tweets_csv_hashed_part1", encoding = "UTF-8")
+io1d <- read.csv("china_082019_3_tweets_csv_hashed_part2", encoding = "UTF-8")
+io1e <- read.csv("china_082019_3_tweets_csv_hashed_part3", encoding = "UTF-8")
+io1 <- rbind(io1a, io1b, io1c, io1d, io1e)
+
+io2 <- read.csv("china_052020_tweets_csv_hashed", encoding = "UTF-8")
+
+io3a <- read.csv("CNHU_0621_tweets_csv_hashed_2019", encoding = "UTF-8")
+io3b <- read.csv("CNHU_0621_tweets_csv_hashed_2020", encoding = "UTF-8")
+io3c <- read.csv("CNHU_0621_tweets_csv_hashed_2021", encoding = "UTF-8")
+io3 <- rbind(io3a, io3b, io3c)
+
+io4a <- read.csv("CNCC_0621_tweets_csv_hashed_2012", encoding = "UTF-8")
+io4b <- read.csv("CNCC_0621_tweets_csv_hashed_2013", encoding = "UTF-8")
+io4c <- read.csv("CNCC_0621_tweets_csv_hashed_2014", encoding = "UTF-8")
+io4d <- read.csv("CNCC_0621_tweets_csv_hashed_2015", encoding = "UTF-8")
+io4e <- read.csv("CNCC_0621_tweets_csv_hashed_2016", encoding = "UTF-8")
+io4f <- read.csv("CNCC_0621_tweets_csv_hashed_2017", encoding = "UTF-8")
+io4g <- read.csv("CNCC_0621_tweets_csv_hashed_2018", encoding = "UTF-8")
+io4h <- read.csv("CNCC_0621_tweets_csv_hashed_2019", encoding = "UTF-8")
+io4i <- read.csv("CNCC_0621_tweets_csv_hashed_2020", encoding = "UTF-8")
+io4j <- read.csv("CNCC_0621_tweets_csv_hashed_2021", encoding = "UTF-8")
+io4 <- rbind(io4a, io4b, io4c, io4d, io4e, io4f, io4g, io4h, io4i, io4j)
+```
+
+```{r}
+# Save dataset for each IO.
+write_excel_csv(io1, "china_082019.csv")
+write_excel_csv(io2, "china_052020.csv")
+write_excel_csv(io2, "china_122021_cnhu.csv")
+write_excel_csv(io2, "china_122021_cncc.csv")
+```
+
+```{r}
+# Load datasets.
+io1 <- read.csv("china_082019.csv", encoding = "UTF-8")
+io2 <- read.csv("china_052020.csv", encoding = "UTF-8")
+io3 <- read.csv("china_122021_cnhu.csv", encoding = "UTF-8")
+io4 <- read.csv("china_122021_cncc.csv", encoding = "UTF-8")
+```
+
+```{r}
+# Find date range of each IO.
+range(io1$tweet_time)
+range(io2$tweet_time)
+range(io3$tweet_time)
+range(io4$tweet_time)
+```
+
+```{r}
+# Check no. of accounts.
+for (i in list(io1, io2, io3, io4)) {
+print(count(distinct(i, userid)))
+}
+```
+
+```{r}
+# Number of tweets.
+nrow(io1)
+nrow(io2)
+nrow(io3)
+nrow(io4)
+
+# Check number of tweets by language.
+table(io1$tweet_language)
+table(io2$tweet_language)
+table(io3$tweet_language)
+table(io4$tweet_language)
+
+# Derive proportion of tweets in English.
+nrow(io1[which(io1$tweet_language == "en"), ])/nrow(io1)
+nrow(io2[which(io2$tweet_language == "en"), ])/nrow(io2)
+nrow(io3[which(io3$tweet_language == "en"), ])/nrow(io3)
+nrow(io4[which(io4$tweet_language == "en"), ])/nrow(io4)
+
+# Derive proportion of tweets in Chinese.
+nrow(io1[which(io1$tweet_language == "zh"), ])/nrow(io1)
+nrow(io2[which(io2$tweet_language == "zh"), ])/nrow(io2)
+nrow(io3[which(io3$tweet_language == "zh"), ])/nrow(io3)
+nrow(io4[which(io4$tweet_language == "zh"), ])/nrow(io4)
+```
+
+```{r}
+# Filter out tweets in English.
+io1_en <- io1[which(io1$tweet_language == "en"), ]
+io2_en <- io2[which(io2$tweet_language == "en"), ]
+io3_en <- io3[which(io3$tweet_language == "en"), ]
+io4_en <- io4[which(io4$tweet_language == "en"), ]
+
+# Filter out tweets in Chinese.
+io1_zh <- io1[which(io1$tweet_language == "zh"), ]
+io2_zh <- io2[which(io2$tweet_language == "zh"), ]
+io3_zh <- io3[which(io3$tweet_language == "zh"), ]
+io4_zh <- io4[which(io4$tweet_language == "zh"), ]
+```
+
+```{r}
+# Convert traditional to simplified Chinese.
+io1_zh$tweet_text <- toTrad(io1_zh$tweet_text, rev = TRUE)
+io2_zh$tweet_text <- toTrad(io2_zh$tweet_text, rev = TRUE)
+io3_zh$tweet_text <- toTrad(io3_zh$tweet_text, rev = TRUE)
+io4_zh$tweet_text <- toTrad(io4_zh$tweet_text, rev = TRUE)
+```
+
+```{r}
+# Set seed for replicability.
+set.seed(42)
+
+# Take random sample of 500 English tweets for classification.
+io1_en_class <- sample_n(io1_en, size = 500, replace = FALSE)
+io1_en_main <- anti_join(io1_en, io1_en_class)
+
+io2_en_class <- sample_n(io2_en, size = 500, replace = FALSE)
+io2_en_main <- anti_join(io2_en, io2_en_class)
+
+io3_en_class <- sample_n(io3_en, size = 500, replace = FALSE)
+io3_en_main <- anti_join(io3_en, io3_en_class)
+
+io4_en_class <- sample_n(io4_en, size = 500, replace = FALSE)
+io4_en_main <- anti_join(io4_en, io4_en_class)
+```
+
+```{r}
+# Save English datasets as csv files.
+write_excel_csv(io1_en_class, "china_082019_en_class.csv")
+write_excel_csv(io1_en_main, "china_082019_en_main.csv")
+
+write_excel_csv(io2_en_class, "china_052020_en_class.csv")
+write_excel_csv(io2_en_main, "china_052020_en_main.csv")
+
+write_excel_csv(io3_en_class, "china_122021_cnhu_en_class.csv")
+write_excel_csv(io3_en_main, "china_122021_cnhu_en_main.csv")
+
+write_excel_csv(io4_en_class, "china_122021_cncc_en_class.csv")
+write_excel_csv(io4_en_main, "china_122021_cncc_en_main.csv")
+```
+
+```{r}
+# Set seed for replicability.
+set.seed(42)
+
+# Take random sample of 500 Chinese tweets for classification.
+io1_zh_class <- sample_n(io1_zh, size = 500, replace = FALSE)
+io1_zh_main <- anti_join(io1_zh, io1_zh_class)
+
+io2_zh_class <- sample_n(io2_zh, size = 500, replace = FALSE)
+io2_zh_main <- anti_join(io2_zh, io2_zh_class)
+
+io3_zh_class <- sample_n(io3_zh, size = 500, replace = FALSE)
+io3_zh_main <- anti_join(io3_zh, io3_zh_class)
+
+io4_zh_class <- sample_n(io4_zh, size = 500, replace = FALSE)
+io4_zh_main <- anti_join(io4_zh, io4_zh_class)
+```
+
+```{r}
+# Save Chinese datasets as csv files.
+write_excel_csv(io1_zh_class, "china_082019_zh_class.csv")
+write_excel_csv(io1_zh_main, "china_082019_zh_main.csv")
+
+write_excel_csv(io2_zh_class, "china_052020_zh_class.csv")
+write_excel_csv(io2_zh_main, "china_052020_zh_main.csv")
+
+write_excel_csv(io3_zh_class, "china_122021_cnhu_zh_class.csv")
+write_excel_csv(io3_zh_main, "china_122021_cnhu_zh_main.csv")
+
+write_excel_csv(io4_zh_class, "china_122021_cncc_zh_class.csv")
+write_excel_csv(io4_zh_main, "china_122021_cncc_zh_main.csv")
+```
